@@ -205,8 +205,10 @@ export function WaiverForm() {
                 <h3 className="text-lg font-semibold text-ink">
                   Waiver terms and policy
                 </h3>
-                <p className="mt-1 max-w-2xl text-sm leading-6 text-graphite md:text-base md:leading-7">
-                  The attendee must open and acknowledge the terms before consent.
+                <p className="mt-2 max-w-3xl whitespace-pre-line text-sm leading-6 text-graphite md:text-base md:leading-7">
+                  {`The L’Oréalistar Launch Event (the “Event”) is organized by L’Oréal Middle East FZE (“L’Oréal”) on 23rd of June 2026 in Isola Bay, Dubai, United Arab Emirates for the purpose of launching the L’Oréalistar platform.
+
+By attending the Event, I, the undersigned, accept without reserve the below terms`}
                 </p>
               </div>
               <button
