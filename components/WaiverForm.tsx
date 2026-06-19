@@ -236,7 +236,7 @@ export function WaiverForm() {
             <FieldError message={errors.termsRead} />
           </section>
 
-          <section className="rounded-lg border border-ink/12 bg-white p-4">
+          <section className="rounded-lg border border-ink/12 bg-white p-4 md:p-5">
             <label
               className={`grid grid-cols-[auto_1fr] gap-3 rounded-lg border p-3 ${
                 payload.termsRead
@@ -293,7 +293,7 @@ export function WaiverForm() {
           </section>
         </div>
 
-        <div className="sticky bottom-0 mt-5 border-t border-ink/10 bg-pearl/95 pt-4 backdrop-blur">
+        <div className="mt-6 border-t border-ink/10 pt-5">
           {serverMessage ? (
             <p
               className="mb-3 rounded-lg bg-rouge/10 px-3 py-2 text-sm font-medium text-rouge"
@@ -301,11 +301,11 @@ export function WaiverForm() {
               {serverMessage}
             </p>
           ) : null}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="grid gap-3 sm:grid-cols-[180px_1fr]">
             <button
               type="button"
               onClick={resetForm}
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-ink/12 px-4 text-base font-semibold text-graphite transition hover:border-rouge hover:text-rouge"
+              className="inline-flex h-14 items-center justify-center gap-2 rounded-lg border border-ink/12 bg-white px-4 text-base font-semibold text-graphite transition hover:border-rouge hover:text-rouge"
             >
               <RotateCcw aria-hidden="true" className="h-4 w-4" />
               Reset
@@ -313,7 +313,7 @@ export function WaiverForm() {
             <button
               type="submit"
               disabled={submitState === "submitting"}
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-ink px-5 text-base font-semibold text-white transition hover:bg-rouge disabled:cursor-not-allowed disabled:bg-graphite/50"
+              className="inline-flex h-14 items-center justify-center gap-2 rounded-lg bg-ink px-5 text-lg font-semibold text-white transition hover:bg-rouge disabled:cursor-not-allowed disabled:bg-graphite/50"
               aria-busy={submitState === "submitting"}
             >
               {submitState === "submitting" ? (
