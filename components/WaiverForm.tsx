@@ -261,9 +261,10 @@ By attending the Event, I, the undersigned, accept without reserve the below ter
                   <span className="text-rouge">*</span>
                 </span>
                 <span className="mt-1 block text-sm leading-6 text-graphite">
-                  By checking this box, I confirm that the attendee named above
-                  accepts the waiver terms and policy for the Lorealistar
-                  Launch Event.
+                  By signing this personal release undertaking, I warrant that I
+                  am in my full capacity in order to grant the abovementioned
+                  rights to L’Oréal and irrevocably accept to be legally bound by
+                  the above terms.
                 </span>
                 <FieldError message={errors.consentWaiver} />
               </span>
@@ -292,6 +293,12 @@ By attending the Event, I, the undersigned, accept without reserve the below ter
               }
             />
             <FieldError message={errors.signatureDataUrl} />
+            <p className="mt-3 text-xs leading-5 text-graphite md:text-sm md:leading-6">
+              Your personal data are collected and processed by L’Oréal in order
+              to manage the Event, Film(s) and/or the Visual(s) for which you
+              give your consent. For more information on how we manage data
+              please check the following link:
+            </p>
           </section>
         </div>
 
