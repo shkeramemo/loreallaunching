@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
+const SIGNATURE_VIEW_URL_EXPIRY_SECONDS = 60 * 60 * 24 * 7;
 
 type WaiverSubmissionRow = {
   id: string;
@@ -76,7 +77,10 @@ export async function GET(request: Request) {
         if (signaturePath) {
           const { data: signedUrlData } = await supabase.storage
             .from(signaturePath.bucketName)
-            .createSignedUrl(signaturePath.objectPath, 60 * 10);
+            .createSignedUrl(
+              signaturePath.objectPath,
+              SIGNATURE_VIEW_URL_EXPIRY_SECONDS,
+            );
 
           signaturePreviewUrl = signedUrlData?.signedUrl || "";
         }

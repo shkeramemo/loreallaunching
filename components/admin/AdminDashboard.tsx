@@ -48,7 +48,7 @@ function downloadCsv(submissions: AdminSubmission[]) {
     "consent_accepted",
     "event_name",
     "tablet_id",
-    "signature_url",
+    "signature_preview_url",
     "user_agent",
   ];
   const rows = submissions.map((submission) => [
@@ -60,7 +60,7 @@ function downloadCsv(submissions: AdminSubmission[]) {
     submission.consentAccepted,
     submission.eventName,
     submission.tabletId,
-    submission.signatureUrl,
+    submission.signaturePreviewUrl,
     submission.userAgent,
   ]);
   const csv = [
