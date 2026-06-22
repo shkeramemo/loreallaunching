@@ -176,7 +176,7 @@ export function WaiverForm() {
       >
         <header className="mb-6 border-b border-ink/10 pb-5">
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-rouge">
-            L&apos;Oréalistar
+            LOrealistar
           </p>
           <h1 className="mt-2 text-3xl font-semibold leading-tight text-ink md:text-4xl">
             Launch Event Waiver
