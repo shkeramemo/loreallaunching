@@ -297,7 +297,13 @@ By attending the Event, I, the undersigned, accept without reserve the below ter
               Your personal data are collected and processed by L’Oréal in order
               to manage the Event, Film(s) and/or the Visual(s) for which you
               give your consent. For more information on how we manage data
-              please check the following link:
+              please check the following link: {" "}
+              <a
+                href="https://www.loreal.com/en/middle-east/uae-privacy-policy/"
+                className="font-semibold text-blue-700 underline underline-offset-2 transition hover:text-blue-900"
+              >
+                UAE Privacy Policy
+              </a>
             </p>
           </section>
         </div>
