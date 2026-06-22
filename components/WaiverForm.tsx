@@ -200,24 +200,22 @@ export function WaiverForm() {
           </label>
 
           <section className="rounded-lg border border-ink/12 bg-white p-4 md:p-5">
-            <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
-              <div className="min-w-0">
-                <h3 className="text-lg font-semibold text-ink">
-                  Waiver terms and policy
-                </h3>
-                <p className="mt-2 max-w-3xl whitespace-pre-line text-sm leading-6 text-graphite md:text-base md:leading-7">
-                  {`The Lorealistar Launch Event (the “Event”) is organized by L’Oréal Middle East FZE (“L’Oréal”) on 23rd of June 2026 in Isola Bay, Dubai, United Arab Emirates for the purpose of launching the Lorealistar platform.
+            <div className="min-w-0">
+              <h3 className="text-lg font-semibold text-ink">
+                Waiver terms and policy
+              </h3>
+              <p className="mt-2 max-w-3xl whitespace-pre-line text-sm leading-6 text-graphite md:text-base md:leading-7">
+                {`The Lorealistar Launch Event (the “Event”) is organized by L’Oréal Middle East FZE (“L’Oréal”) on 23rd of June 2026 in Isola Bay, Dubai, United Arab Emirates for the purpose of launching the Lorealistar platform.
 
 By attending the Event, I, the undersigned, accept without reserve the below terms`}
-                </p>
-              </div>
+              </p>
               <button
                 type="button"
                 onClick={() => setTermsOpen(true)}
-                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-ink px-5 text-base font-semibold text-white transition hover:bg-rouge md:w-[180px] md:whitespace-nowrap"
+                className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-ink px-5 text-base font-semibold text-white transition hover:bg-rouge md:w-auto md:whitespace-nowrap"
               >
                 <FileText aria-hidden="true" className="h-5 w-5" />
-                Open policy
+                Open Terms and Conditions
               </button>
             </div>
 
