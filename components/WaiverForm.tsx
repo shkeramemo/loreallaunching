@@ -262,7 +262,7 @@ By attending the Event, I, the undersigned, accept without reserve the below ter
                 </span>
                 <span className="mt-1 block text-sm leading-6 text-graphite">
                   By checking this box, I confirm that the attendee named above
-                  accepts the waiver terms and policy for the L&apos;Oréalistar
+                  accepts the waiver terms and policy for the Lorealistar
                   Launch Event.
                 </span>
                 <FieldError message={errors.consentWaiver} />
