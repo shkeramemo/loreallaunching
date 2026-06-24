@@ -8,8 +8,10 @@ import {
 } from "@/lib/waiver";
 import {
   createSupabaseServerClient,
+  getSignedDocumentBucketName,
   getSignatureBucketName,
 } from "@/lib/supabase/server";
+import { createSignedWaiverPdf } from "@/lib/waiver-pdf";
 
 export const runtime = "nodejs";
 
@@ -182,15 +184,23 @@ export async function POST(request: Request) {
 
   try {
     const supabase = createSupabaseServerClient();
-    const bucketName = getSignatureBucketName();
+    const signatureBucketName = getSignatureBucketName();
+    const documentBucketName = getSignedDocumentBucketName();
+    const submissionId = crypto.randomUUID();
+    const storageDate = new Date().toISOString().slice(0, 10);
     const signaturePath = [
       "signatures",
-      new Date().toISOString().slice(0, 10),
-      `${crypto.randomUUID()}.png`,
+      storageDate,
+      `${submissionId}.png`,
+    ].join("/");
+    const documentPath = [
+      "documents",
+      storageDate,
+      `${submissionId}.pdf`,
     ].join("/");
 
     const { error: uploadError } = await supabase.storage
-      .from(bucketName)
+      .from(signatureBucketName)
       .upload(signaturePath, signatureBuffer, {
         contentType: "image/png",
         upsert: false,
@@ -203,13 +213,47 @@ export async function POST(request: Request) {
       );
     }
 
+    let documentBytes: Uint8Array;
+
+    try {
+      documentBytes = await createSignedWaiverPdf({
+        fullName: normalizedPayload.fullName,
+        signaturePng: signatureBuffer,
+        signedAt: normalizedPayload.signedAt,
+        submissionId,
+      });
+    } catch {
+      await supabase.storage.from(signatureBucketName).remove([signaturePath]);
+      return NextResponse.json(
+        { message: "Unable to create the signed waiver document. Please try again." },
+        { status: 500 },
+      );
+    }
+
+    const { error: documentUploadError } = await supabase.storage
+      .from(documentBucketName)
+      .upload(documentPath, documentBytes, {
+        contentType: "application/pdf",
+        upsert: false,
+      });
+
+    if (documentUploadError) {
+      await supabase.storage.from(signatureBucketName).remove([signaturePath]);
+      return NextResponse.json(
+        { message: "Unable to save the signed waiver document. Please try again." },
+        { status: 500 },
+      );
+    }
+
     const { error } = await supabase.from("waiver_submissions").insert({
+      id: submissionId,
       full_name: normalizedPayload.fullName,
       email: null,
       phone: null,
       consent_accepted:
         normalizedPayload.termsRead && normalizedPayload.consentWaiver,
-      signature_url: `${bucketName}/${signaturePath}`,
+      signature_url: `${signatureBucketName}/${signaturePath}`,
+      signed_document_url: `${documentBucketName}/${documentPath}`,
       signed_at: normalizedPayload.signedAt,
       event_name: "L'Oréalistar Launch Event",
       user_agent: request.headers.get("user-agent"),
@@ -217,7 +261,10 @@ export async function POST(request: Request) {
     });
 
     if (error) {
-      await supabase.storage.from(bucketName).remove([signaturePath]);
+      await Promise.all([
+        supabase.storage.from(signatureBucketName).remove([signaturePath]),
+        supabase.storage.from(documentBucketName).remove([documentPath]),
+      ]);
 
       return NextResponse.json(
         { message: "Unable to save waiver. Please try again." },

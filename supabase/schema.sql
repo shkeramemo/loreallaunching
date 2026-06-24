@@ -5,6 +5,7 @@ create table if not exists public.waiver_submissions (
   phone text,
   consent_accepted boolean not null default false,
   signature_url text not null,
+  signed_document_url text,
   signed_at timestamptz not null default now(),
   event_name text not null default 'L''Oréalistar Launch Event',
   user_agent text,
@@ -57,4 +58,34 @@ create policy "Allow signature image uploads"
   with check (
     bucket_id = 'signature-images'
     and lower((storage.foldername(name))[1]) = 'signatures'
+  );
+
+insert into storage.buckets (
+  id,
+  name,
+  public,
+  file_size_limit,
+  allowed_mime_types
+)
+values (
+  'signed-waivers',
+  'signed-waivers',
+  false,
+  5242880,
+  array['application/pdf']
+)
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "Allow signed waiver document uploads" on storage.objects;
+
+create policy "Allow signed waiver document uploads"
+  on storage.objects
+  for insert
+  to anon
+  with check (
+    bucket_id = 'signed-waivers'
+    and lower((storage.foldername(name))[1]) = 'documents'
   );

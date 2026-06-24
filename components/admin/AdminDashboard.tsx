@@ -3,6 +3,7 @@
 import {
   Download,
   FileSearch,
+  FileText,
   Loader2,
   Lock,
   RefreshCw,
@@ -19,6 +20,8 @@ type AdminSubmission = {
   consentAccepted: boolean;
   signatureUrl: string;
   signaturePreviewUrl: string;
+  signedDocumentUrl: string | null;
+  signedDocumentPreviewUrl: string;
   signedAt: string;
   eventName: string;
   userAgent: string | null;
@@ -46,6 +49,7 @@ function downloadSpreadsheet(submissions: AdminSubmission[]) {
     "event_name",
     "tablet_id",
     "signature",
+    "signed_document",
     "user_agent",
   ];
   const rows = submissions.map((submission) => [
@@ -58,24 +62,37 @@ function downloadSpreadsheet(submissions: AdminSubmission[]) {
     submission.eventName,
     submission.tabletId,
     submission.signaturePreviewUrl ? "View signature" : "",
+    submission.signedDocumentPreviewUrl ? "View signed document" : "",
     submission.userAgent,
   ]);
   const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
 
   submissions.forEach((submission, index) => {
-    if (!submission.signaturePreviewUrl) {
-      return;
+    const row = index + 1;
+
+    if (submission.signaturePreviewUrl) {
+      const cellAddress = XLSX.utils.encode_cell({ r: row, c: 8 });
+      worksheet[cellAddress] = {
+        t: "s",
+        v: "View signature",
+        l: {
+          Target: submission.signaturePreviewUrl,
+          Tooltip: "Open signature image",
+        },
+      };
     }
 
-    const cellAddress = XLSX.utils.encode_cell({ r: index + 1, c: 8 });
-    worksheet[cellAddress] = {
-      t: "s",
-      v: "View signature",
-      l: {
-        Target: submission.signaturePreviewUrl,
-        Tooltip: "Open signature image",
-      },
-    };
+    if (submission.signedDocumentPreviewUrl) {
+      const cellAddress = XLSX.utils.encode_cell({ r: row, c: 9 });
+      worksheet[cellAddress] = {
+        t: "s",
+        v: "View signed document",
+        l: {
+          Target: submission.signedDocumentPreviewUrl,
+          Tooltip: "Open signed waiver PDF",
+        },
+      };
+    }
   });
 
   worksheet["!cols"] = [
@@ -88,6 +105,7 @@ function downloadSpreadsheet(submissions: AdminSubmission[]) {
     { wch: 28 },
     { wch: 22 },
     { wch: 18 },
+    { wch: 24 },
     { wch: 42 },
   ];
 
@@ -106,6 +124,8 @@ export function AdminDashboard() {
   const [search, setSearch] = useState("");
   const [submissions, setSubmissions] = useState<AdminSubmission[]>([]);
   const [totalCount, setTotalCount] = useState(0);
+  const [missingSignedDocumentCount, setMissingSignedDocumentCount] = useState(0);
+  const [isGeneratingDocuments, setIsGeneratingDocuments] = useState(false);
   const [loadState, setLoadState] = useState<LoadState>("locked");
   const [message, setMessage] = useState("");
 
@@ -146,6 +166,7 @@ export function AdminDashboard() {
       const result = (await response.json()) as {
         message?: string;
         totalCount?: number;
+        missingSignedDocumentCount?: number;
         submissions?: AdminSubmission[];
       };
 
@@ -159,6 +180,7 @@ export function AdminDashboard() {
       setPassword("");
       setSubmissions(result.submissions || []);
       setTotalCount(result.totalCount || 0);
+      setMissingSignedDocumentCount(result.missingSignedDocumentCount || 0);
       setLoadState("ready");
     } catch {
       setLoadState("error");
@@ -169,6 +191,63 @@ export function AdminDashboard() {
   function submitPassword(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void loadSubmissions(password);
+  }
+
+  async function generateMissingDocuments() {
+    if (!savedPassword || isGeneratingDocuments) {
+      return;
+    }
+
+    setIsGeneratingDocuments(true);
+    setMessage("");
+    let generatedCount = 0;
+    let failedCount = 0;
+    let finalMessage = "";
+
+    try {
+      while (true) {
+        const response = await fetch("/api/admin/submissions", {
+          method: "POST",
+          headers: {
+            "x-admin-password": savedPassword,
+          },
+        });
+        const result = (await response.json()) as {
+          message?: string;
+          processedCount?: number;
+          failedCount?: number;
+          remainingCount?: number;
+        };
+
+        if (!response.ok) {
+          throw new Error(result.message || "Unable to generate signed documents.");
+        }
+
+        generatedCount += result.processedCount || 0;
+        failedCount += result.failedCount || 0;
+
+        if ((result.remainingCount || 0) === 0) {
+          finalMessage = `Generated ${generatedCount} signed document${generatedCount === 1 ? "" : "s"}.`;
+          break;
+        }
+
+        if (!result.processedCount) {
+          finalMessage = `${generatedCount} document${generatedCount === 1 ? "" : "s"} generated. ${failedCount} submission${failedCount === 1 ? " could" : "s could"} not be processed.`;
+          break;
+        }
+      }
+
+      await loadSubmissions();
+      setMessage(finalMessage);
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to generate signed documents.",
+      );
+    } finally {
+      setIsGeneratingDocuments(false);
+    }
   }
 
   if (loadState === "locked" || (loadState === "error" && !savedPassword)) {
@@ -255,6 +334,21 @@ export function AdminDashboard() {
               </button>
               <button
                 type="button"
+                onClick={() => void generateMissingDocuments()}
+                disabled={
+                  isGeneratingDocuments || missingSignedDocumentCount === 0
+                }
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-ink/12 bg-white px-4 text-base font-semibold text-graphite transition hover:border-rouge hover:text-rouge disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isGeneratingDocuments ? (
+                  <Loader2 aria-hidden="true" className="h-5 w-5 animate-spin" />
+                ) : (
+                  <FileText aria-hidden="true" className="h-5 w-5" />
+                )}
+                Generate PDFs ({missingSignedDocumentCount})
+              </button>
+              <button
+                type="button"
                 onClick={() => downloadSpreadsheet(filteredSubmissions)}
                 disabled={filteredSubmissions.length === 0}
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-ink px-4 text-base font-semibold text-white transition hover:bg-rouge disabled:cursor-not-allowed disabled:bg-graphite/50"
@@ -293,17 +387,18 @@ export function AdminDashboard() {
 
         <div className="overflow-hidden rounded-lg border border-ink/10 bg-white shadow-soft-panel">
           <div className="overflow-x-auto">
-            <div className="grid min-w-[720px] grid-cols-[190px_1fr_190px] border-b border-ink/10 bg-pearl px-4 py-3 text-sm font-semibold uppercase tracking-[0.12em] text-graphite">
+            <div className="grid min-w-[900px] grid-cols-[180px_1fr_170px_150px] border-b border-ink/10 bg-pearl px-4 py-3 text-sm font-semibold uppercase tracking-[0.12em] text-graphite">
               <span>Signed at</span>
               <span>Name</span>
               <span>Signature</span>
+              <span>Document</span>
             </div>
-            <div className="max-h-[calc(100vh-300px)] min-w-[720px] overflow-y-auto">
+            <div className="max-h-[calc(100vh-300px)] min-w-[900px] overflow-y-auto">
             {filteredSubmissions.length > 0 ? (
               filteredSubmissions.map((submission) => (
                 <article
                   key={submission.id}
-                  className="grid min-h-[92px] grid-cols-[190px_1fr_190px] items-center gap-4 border-b border-ink/8 px-4 py-3 last:border-b-0"
+                  className="grid min-h-[92px] grid-cols-[180px_1fr_170px_150px] items-center gap-4 border-b border-ink/8 px-4 py-3 last:border-b-0"
                 >
                   <time className="text-sm font-medium text-graphite">
                     {formatSignedAt(submission.signedAt)}
@@ -328,6 +423,21 @@ export function AdminDashboard() {
                       <div className="flex h-full items-center justify-center text-sm text-graphite">
                         No preview
                       </div>
+                    )}
+                  </div>
+                  <div>
+                    {submission.signedDocumentPreviewUrl ? (
+                      <a
+                        href={submission.signedDocumentPreviewUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex h-10 items-center gap-2 rounded-lg border border-ink/12 bg-white px-3 text-sm font-semibold text-graphite transition hover:border-rouge hover:text-rouge"
+                      >
+                        <FileText aria-hidden="true" className="h-4 w-4" />
+                        View PDF
+                      </a>
+                    ) : (
+                      <span className="text-sm text-graphite/65">Not generated</span>
                     )}
                   </div>
                 </article>

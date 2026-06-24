@@ -31,3 +31,7 @@ export function createSupabaseServerClient() {
 export function getSignatureBucketName() {
   return process.env.SUPABASE_SIGNATURES_BUCKET || "signature-images";
 }
+
+export function getSignedDocumentBucketName() {
+  return process.env.SUPABASE_SIGNED_DOCUMENTS_BUCKET || "signed-waivers";
+}

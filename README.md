@@ -23,6 +23,7 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 SUPABASE_SIGNATURES_BUCKET=signature-images
+SUPABASE_SIGNED_DOCUMENTS_BUCKET=signed-waivers
 ADMIN_PASSWORD=change-me
 ```
 
@@ -36,7 +37,8 @@ npm run dev
 
 ## Notes
 
-- The API route uploads the signature PNG to the `signature-images` storage bucket and inserts the submission into `public.waiver_submissions`.
-- The `/admin` page uses `ADMIN_PASSWORD` and lists waiver submissions with search, signature previews, total count, and CSV export.
+- The API route uploads the signature PNG to `signature-images`, generates a signed PDF in `signed-waivers`, and inserts the submission into `public.waiver_submissions`.
+- The `/admin` page uses `ADMIN_PASSWORD` and lists waiver submissions with search, signature previews, signed document links, total count, and Excel export.
+- After running the signed-document migration, use **Generate PDFs** in `/admin` to create signed PDFs for existing submissions. It processes records in batches and leaves the original records unchanged.
 - `SUPABASE_SERVICE_ROLE_KEY` is optional. Without it, inserts use the anon key and the included RLS policy.
 - The generated event backdrop is stored at `public/event-backdrop.png`.
