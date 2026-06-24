@@ -38,6 +38,15 @@ function csvEscape(value: string | number | boolean | null) {
   return `"${stringValue.replaceAll('"', '""')}"`;
 }
 
+function signatureLinkFormula(signatureUrl: string) {
+  if (!signatureUrl) {
+    return "";
+  }
+
+  const escapedUrl = signatureUrl.replaceAll('"', '""');
+  return `=HYPERLINK("${escapedUrl}","View signature")`;
+}
+
 function downloadCsv(submissions: AdminSubmission[]) {
   const headers = [
     "id",
@@ -48,7 +57,7 @@ function downloadCsv(submissions: AdminSubmission[]) {
     "consent_accepted",
     "event_name",
     "tablet_id",
-    "signature_preview_url",
+    "signature_link",
     "user_agent",
   ];
   const rows = submissions.map((submission) => [
@@ -60,7 +69,7 @@ function downloadCsv(submissions: AdminSubmission[]) {
     submission.consentAccepted,
     submission.eventName,
     submission.tabletId,
-    submission.signaturePreviewUrl,
+    signatureLinkFormula(submission.signaturePreviewUrl),
     submission.userAgent,
   ]);
   const csv = [
