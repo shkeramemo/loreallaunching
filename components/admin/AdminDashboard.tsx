@@ -9,6 +9,7 @@ import {
   Search,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 
 type AdminSubmission = {
   id: string;
@@ -33,21 +34,7 @@ function formatSignedAt(value: string) {
   }).format(new Date(value));
 }
 
-function csvEscape(value: string | number | boolean | null) {
-  const stringValue = value === null ? "" : String(value);
-  return `"${stringValue.replaceAll('"', '""')}"`;
-}
-
-function signatureLinkFormula(signatureUrl: string) {
-  if (!signatureUrl) {
-    return "";
-  }
-
-  const escapedUrl = signatureUrl.replaceAll('"', '""');
-  return `=HYPERLINK("${escapedUrl}","View signature")`;
-}
-
-function downloadCsv(submissions: AdminSubmission[]) {
+function downloadSpreadsheet(submissions: AdminSubmission[]) {
   const headers = [
     "id",
     "signed_at",
@@ -57,7 +44,7 @@ function downloadCsv(submissions: AdminSubmission[]) {
     "consent_accepted",
     "event_name",
     "tablet_id",
-    "signature_link",
+    "signature",
     "user_agent",
   ];
   const rows = submissions.map((submission) => [
@@ -69,23 +56,47 @@ function downloadCsv(submissions: AdminSubmission[]) {
     submission.consentAccepted,
     submission.eventName,
     submission.tabletId,
-    signatureLinkFormula(submission.signaturePreviewUrl),
+    submission.signaturePreviewUrl ? "View signature" : "",
     submission.userAgent,
   ]);
-  const csv = [
-    headers.map(csvEscape).join(","),
-    ...rows.map((row) => row.map(csvEscape).join(",")),
-  ].join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
+  const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
 
-  link.href = url;
-  link.download = `waiver-submissions-${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  submissions.forEach((submission, index) => {
+    if (!submission.signaturePreviewUrl) {
+      return;
+    }
+
+    const cellAddress = XLSX.utils.encode_cell({ r: index + 1, c: 8 });
+    worksheet[cellAddress] = {
+      t: "s",
+      v: "View signature",
+      l: {
+        Target: submission.signaturePreviewUrl,
+        Tooltip: "Open signature image",
+      },
+    };
+  });
+
+  worksheet["!cols"] = [
+    { wch: 38 },
+    { wch: 24 },
+    { wch: 28 },
+    { wch: 26 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 28 },
+    { wch: 22 },
+    { wch: 18 },
+    { wch: 42 },
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Waiver submissions");
+  XLSX.writeFile(
+    workbook,
+    `waiver-submissions-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    { compression: true },
+  );
 }
 
 export function AdminDashboard() {
@@ -243,12 +254,12 @@ export function AdminDashboard() {
               </button>
               <button
                 type="button"
-                onClick={() => downloadCsv(filteredSubmissions)}
+                onClick={() => downloadSpreadsheet(filteredSubmissions)}
                 disabled={filteredSubmissions.length === 0}
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-ink px-4 text-base font-semibold text-white transition hover:bg-rouge disabled:cursor-not-allowed disabled:bg-graphite/50"
               >
                 <Download aria-hidden="true" className="h-5 w-5" />
-                Export CSV
+                Export Excel
               </button>
             </div>
           </div>
