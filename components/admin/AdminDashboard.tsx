@@ -31,13 +31,14 @@ function formatSignedAt(value: string) {
   return new Intl.DateTimeFormat("en-AE", {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: "Asia/Dubai",
   }).format(new Date(value));
 }
 
 function downloadSpreadsheet(submissions: AdminSubmission[]) {
   const headers = [
     "id",
-    "signed_at",
+    "signed_at_dubai",
     "full_name",
     "email",
     "phone",
@@ -49,7 +50,7 @@ function downloadSpreadsheet(submissions: AdminSubmission[]) {
   ];
   const rows = submissions.map((submission) => [
     submission.id,
-    submission.signedAt,
+    formatSignedAt(submission.signedAt),
     submission.fullName,
     submission.email,
     submission.phone,
