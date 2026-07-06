@@ -39,6 +39,7 @@ npm run dev
 
 - The API route uploads the signature PNG to `signature-images`, generates a signed PDF in `signed-waivers`, and inserts the submission into `public.waiver_submissions`.
 - The `/admin` page uses `ADMIN_PASSWORD` and lists waiver submissions with search, signature previews, signed document links, total count, and Excel export.
+- Signature and signed-document links in new admin exports are private Supabase signed links that expire after 1 year. Re-export from `/admin` if an older spreadsheet link expires.
 - After running the signed-document migration, use **Generate PDFs** in `/admin` to create signed PDFs for existing submissions. It processes records in batches and leaves the original records unchanged.
 - `SUPABASE_SERVICE_ROLE_KEY` is optional. Without it, inserts use the anon key and the included RLS policy.
 - The generated event backdrop is stored at `public/event-backdrop.png`.

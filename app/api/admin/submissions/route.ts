@@ -7,7 +7,7 @@ import {
 import { createSignedWaiverPdf } from "@/lib/waiver-pdf";
 
 export const runtime = "nodejs";
-const SIGNATURE_VIEW_URL_EXPIRY_SECONDS = 60 * 60 * 24 * 7;
+const SIGNED_FILE_LINK_EXPIRY_SECONDS = 60 * 60 * 24 * 365;
 const BACKFILL_BATCH_SIZE = 20;
 
 type WaiverSubmissionRow = {
@@ -108,7 +108,7 @@ export async function GET(request: Request) {
             .from(signaturePath.bucketName)
             .createSignedUrl(
               signaturePath.objectPath,
-              SIGNATURE_VIEW_URL_EXPIRY_SECONDS,
+              SIGNED_FILE_LINK_EXPIRY_SECONDS,
             );
 
           signaturePreviewUrl = signedUrlData?.signedUrl || "";
@@ -119,7 +119,7 @@ export async function GET(request: Request) {
             .from(signedDocumentPath.bucketName)
             .createSignedUrl(
               signedDocumentPath.objectPath,
-              SIGNATURE_VIEW_URL_EXPIRY_SECONDS,
+              SIGNED_FILE_LINK_EXPIRY_SECONDS,
             );
 
           signedDocumentPreviewUrl = signedUrlData?.signedUrl || "";
