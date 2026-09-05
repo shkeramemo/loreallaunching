@@ -1,3 +1,10 @@
+import {
+  defaultWaiverLanguage,
+  getWaiverContent,
+  normalizeWaiverLanguage,
+  type WaiverLanguage,
+} from "@/lib/waiver-terms";
+
 export type WaiverPayload = {
   fullName: string;
   termsRead: boolean;
@@ -5,6 +12,7 @@ export type WaiverPayload = {
   signatureDataUrl: string;
   signedAt: string;
   deviceLabel: string;
+  language: WaiverLanguage;
 };
 
 export type WaiverFieldErrors = Partial<Record<keyof WaiverPayload, string>>;
@@ -16,25 +24,27 @@ export const initialWaiverPayload: WaiverPayload = {
   signatureDataUrl: "",
   signedAt: "",
   deviceLabel: "Samsung tablet kiosk",
+  language: defaultWaiverLanguage,
 };
 
 export function validateWaiverPayload(payload: WaiverPayload) {
   const errors: WaiverFieldErrors = {};
+  const content = getWaiverContent(payload.language);
 
   if (payload.fullName.trim().length < 2) {
-    errors.fullName = "Enter the attendee's full name.";
+    errors.fullName = content.validation.fullName;
   }
 
   if (!payload.termsRead) {
-    errors.termsRead = "The attendee must read the waiver terms first.";
+    errors.termsRead = content.validation.termsRead;
   }
 
   if (!payload.consentWaiver) {
-    errors.consentWaiver = "Waiver consent is required.";
+    errors.consentWaiver = content.validation.consentWaiver;
   }
 
   if (!payload.signatureDataUrl.startsWith("data:image/png;base64,")) {
-    errors.signatureDataUrl = "Signature is required.";
+    errors.signatureDataUrl = content.validation.signatureDataUrl;
   }
 
   return {
@@ -48,5 +58,6 @@ export function normalizeWaiverPayload(payload: WaiverPayload): WaiverPayload {
     ...payload,
     fullName: payload.fullName.trim(),
     deviceLabel: payload.deviceLabel.trim() || "Samsung tablet kiosk",
+    language: normalizeWaiverLanguage(payload.language),
   };
 }

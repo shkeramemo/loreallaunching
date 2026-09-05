@@ -14,6 +14,7 @@ import {
 import { createSignedWaiverPdf } from "@/lib/waiver-pdf";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const pngSignature = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -221,6 +222,7 @@ export async function POST(request: Request) {
         signaturePng: signatureBuffer,
         signedAt: normalizedPayload.signedAt,
         submissionId,
+        language: normalizedPayload.language,
       });
     } catch {
       await supabase.storage.from(signatureBucketName).remove([signaturePath]);
@@ -258,6 +260,7 @@ export async function POST(request: Request) {
       event_name: "L'Oréalistar Launch Event",
       user_agent: request.headers.get("user-agent"),
       tablet_id: normalizedPayload.deviceLabel,
+      language: normalizedPayload.language,
     });
 
     if (error) {

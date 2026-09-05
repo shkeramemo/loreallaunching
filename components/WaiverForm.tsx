@@ -19,11 +19,9 @@ import {
   type WaiverPayload,
 } from "@/lib/waiver";
 import {
-  dataProcessingNotice,
-  signatureAcknowledgement,
-  waiverAcceptanceStatement,
-  waiverEventIntroduction,
-  waiverTerms,
+  getWaiverContent,
+  type WaiverContent,
+  type WaiverLanguage,
 } from "@/lib/waiver-terms";
 
 type SubmitState = "idle" | "submitting" | "success" | "error";
@@ -36,7 +34,10 @@ export function WaiverForm() {
   const [serverMessage, setServerMessage] = useState("");
   const [signatureKey, setSignatureKey] = useState(0);
   const [termsOpen, setTermsOpen] = useState(false);
+  const [successLanguage, setSuccessLanguage] =
+    useState<WaiverLanguage>(initialWaiverPayload.language);
   const submitInFlightRef = useRef(false);
+  const content = getWaiverContent(payload.language);
 
   function updateField<Key extends keyof WaiverPayload>(
     key: Key,
@@ -63,6 +64,18 @@ export function WaiverForm() {
     setSignatureKey((value) => value + 1);
   }
 
+  function changeLanguage(language: WaiverLanguage) {
+    setPayload((current) => ({
+      ...current,
+      language,
+      termsRead: false,
+      consentWaiver: false,
+    }));
+    setErrors({});
+    setServerMessage("");
+    setSubmitState("idle");
+  }
+
   async function submitWaiver(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -79,7 +92,7 @@ export function WaiverForm() {
     if (!validation.valid) {
       setErrors(validation.errors);
       setSubmitState("error");
-      setServerMessage("Please complete the required waiver steps.");
+      setServerMessage(content.ui.serverValidationMessage);
       return;
     }
 
@@ -103,36 +116,38 @@ export function WaiverForm() {
       if (!response.ok) {
         setErrors(result.errors || {});
         setSubmitState("error");
-        setServerMessage(result.message || "Unable to submit the waiver.");
+        setServerMessage(result.message || content.ui.submitError);
         submitInFlightRef.current = false;
         return;
       }
 
+      setSuccessLanguage(payload.language);
       setSubmitState("success");
-      setServerMessage("Waiver submitted. Ready for the next attendee.");
       setPayload(initialWaiverPayload);
       setErrors({});
       setSignatureKey((value) => value + 1);
     } catch {
       setSubmitState("error");
-      setServerMessage("Connection issue. Check the tablet network and try again.");
+      setServerMessage(content.ui.networkError);
       submitInFlightRef.current = false;
     }
   }
 
   if (submitState === "success") {
+    const successContent = getWaiverContent(successLanguage);
+
     return (
-      <section className="w-full">
+      <section className="w-full" dir={successContent.dir} lang={successContent.htmlLang}>
         <div className="w-full rounded-lg border border-ink/10 bg-pearl p-6 shadow-soft-panel md:p-8">
           <div className="flex min-h-[560px] flex-col items-center justify-center text-center">
             <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
               <Check aria-hidden="true" className="h-10 w-10" />
             </div>
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-rouge">
-              L&apos;Oréalistar
+              {successContent.eventLabel}
             </p>
             <h1 className="mt-3 max-w-xl text-4xl font-semibold leading-tight text-ink md:text-5xl">
-              Thank you, you may proceed.
+              {successContent.ui.successMessage}
             </h1>
             <button
               type="button"
@@ -140,7 +155,7 @@ export function WaiverForm() {
               className="mt-10 inline-flex h-14 min-w-[260px] items-center justify-center gap-2 rounded-lg bg-ink px-6 text-lg font-semibold text-white transition hover:bg-rouge"
             >
               <RotateCcw aria-hidden="true" className="h-5 w-5" />
-              Next attendee
+              {successContent.ui.nextAttendee}
             </button>
           </div>
         </div>
@@ -149,31 +164,56 @@ export function WaiverForm() {
   }
 
   return (
-    <section className="w-full">
+    <section className="w-full" dir={content.dir} lang={content.htmlLang}>
       <form
         onSubmit={submitWaiver}
         className="w-full rounded-lg border border-ink/10 bg-pearl p-4 shadow-soft-panel sm:p-5 md:max-h-[calc(100vh-4rem)] md:overflow-y-auto md:p-7"
       >
         <header className="mb-6 border-b border-ink/10 pb-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-rouge">
-            LOrealistar
-          </p>
-          <h1 className="mt-2 text-3xl font-semibold leading-tight text-ink md:text-4xl">
-            Launch Event Waiver
-          </h1>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-rouge">
+                {content.eventLabel}
+              </p>
+              <h1 className="mt-2 text-3xl font-semibold leading-tight text-ink md:text-4xl">
+                {content.documentTitle}
+              </h1>
+            </div>
+            <fieldset
+              className="inline-grid grid-cols-2 rounded-lg border border-ink/12 bg-white p-1"
+              aria-label={content.ui.languageLabel}
+              dir="ltr"
+            >
+              {(["ar", "en"] as const).map((language) => (
+                <button
+                  key={language}
+                  type="button"
+                  onClick={() => changeLanguage(language)}
+                  className={`h-11 min-w-[104px] rounded-md px-4 text-sm font-semibold transition ${
+                    payload.language === language
+                      ? "bg-ink text-white"
+                      : "text-graphite hover:bg-pearl"
+                  }`}
+                >
+                  {language === "ar" ? "العربية" : "English"}
+                </button>
+              ))}
+            </fieldset>
+          </div>
         </header>
 
         <div className="grid gap-5">
           <label className="block">
             <span className="mb-1.5 block text-sm font-semibold text-graphite">
-              Full name <span className="text-rouge">*</span>
+              {content.ui.fullNameLabel} <span className="text-rouge">*</span>
             </span>
             <input
               type="text"
               autoComplete="name"
+              dir="auto"
               value={payload.fullName}
               onChange={(event) => updateField("fullName", event.target.value)}
-              placeholder="Attendee full name"
+              placeholder={content.ui.fullNamePlaceholder}
               className="h-14 w-full rounded-lg border border-ink/12 bg-white px-4 text-lg text-ink outline-none transition focus:border-rouge focus:ring-4 focus:ring-rouge/12"
             />
             <FieldError message={errors.fullName} />
@@ -182,10 +222,10 @@ export function WaiverForm() {
           <section className="rounded-lg border border-ink/12 bg-white p-4 md:p-5">
             <div className="min-w-0">
               <h3 className="text-lg font-semibold text-ink">
-                Waiver terms and policy
+                {content.ui.termsTitle}
               </h3>
               <p className="mt-2 max-w-3xl whitespace-pre-line text-sm leading-6 text-graphite md:text-base md:leading-7">
-                {`${waiverEventIntroduction}\n\n${waiverAcceptanceStatement}`}
+                {`${content.eventIntroduction}\n\n${content.acceptanceStatement}`}
               </p>
               <button
                 type="button"
@@ -193,7 +233,7 @@ export function WaiverForm() {
                 className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-ink px-5 text-base font-semibold text-white transition hover:bg-rouge md:w-auto md:whitespace-nowrap"
               >
                 <FileText aria-hidden="true" className="h-5 w-5" />
-                Open Terms and Conditions
+                {content.ui.openTerms}
               </button>
             </div>
 
@@ -209,7 +249,7 @@ export function WaiverForm() {
               ) : (
                 <ChevronRight aria-hidden="true" className="h-4 w-4" />
               )}
-              {payload.termsRead ? "Terms read" : "Terms not read yet"}
+              {payload.termsRead ? content.ui.termsRead : content.ui.termsNotRead}
             </div>
             <FieldError message={errors.termsRead} />
           </section>
@@ -233,11 +273,11 @@ export function WaiverForm() {
               />
               <span>
                 <span className="block text-base font-semibold text-ink">
-                  I have read and agree to the waiver consent{" "}
+                  {content.ui.consentLabel}{" "}
                   <span className="text-rouge">*</span>
                 </span>
                 <span className="mt-1 block text-sm leading-6 text-graphite">
-                  {signatureAcknowledgement}
+                  {content.signatureAcknowledgement}
                 </span>
                 <FieldError message={errors.consentWaiver} />
               </span>
@@ -246,7 +286,9 @@ export function WaiverForm() {
 
           <section className="rounded-lg border border-ink/12 bg-white p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
-              <h3 className="text-lg font-semibold text-ink">Signature</h3>
+              <h3 className="text-lg font-semibold text-ink">
+                {content.ui.signatureTitle}
+              </h3>
               <button
                 type="button"
                 onClick={() => {
@@ -256,24 +298,27 @@ export function WaiverForm() {
                 className="inline-flex h-10 items-center gap-2 rounded-lg border border-ink/12 px-3 text-sm font-semibold text-graphite transition hover:border-rouge hover:text-rouge"
               >
                 <Eraser aria-hidden="true" className="h-4 w-4" />
-                Clear
+                {content.ui.clear}
               </button>
             </div>
             <SignaturePad
               key={signatureKey}
+              ariaLabel={content.ui.signatureAriaLabel}
+              placeholder={content.ui.signaturePlaceholder}
               onChange={(signatureDataUrl) =>
                 updateField("signatureDataUrl", signatureDataUrl)
               }
             />
             <FieldError message={errors.signatureDataUrl} />
             <p className="mt-3 text-xs leading-5 text-graphite md:text-sm md:leading-6">
-              {dataProcessingNotice} For more information on how we manage data
-              please check the following link: {" "}
+              {content.dataProcessingNotice} {content.ui.moreInformation}{" "}
               <a
-                href="https://www.loreal.com/en/middle-east/uae-privacy-policy/"
+                href="https://www.loreal.com/en/middle-east/pages/group/terms-conditions-policies/ksa-privacy-policy/"
+                target="_blank"
+                rel="noreferrer"
                 className="font-semibold text-blue-700 underline underline-offset-2 transition hover:text-blue-900"
               >
-                UAE Privacy Policy
+                {content.privacyPolicyLabel}
               </a>
             </p>
           </section>
@@ -294,7 +339,7 @@ export function WaiverForm() {
               className="inline-flex h-14 items-center justify-center gap-2 rounded-lg border border-ink/12 bg-white px-4 text-base font-semibold text-graphite transition hover:border-rouge hover:text-rouge"
             >
               <RotateCcw aria-hidden="true" className="h-4 w-4" />
-              Reset
+              {content.ui.reset}
             </button>
             <button
               type="submit"
@@ -307,7 +352,7 @@ export function WaiverForm() {
               ) : (
                 <FilePenLine aria-hidden="true" className="h-5 w-5" />
               )}
-              Submit waiver
+              {submitState === "submitting" ? content.ui.submitting : content.ui.submit}
             </button>
           </div>
         </div>
@@ -320,6 +365,7 @@ export function WaiverForm() {
             updateField("termsRead", true);
             setTermsOpen(false);
           }}
+          content={content}
         />
       ) : null}
     </section>
@@ -329,9 +375,11 @@ export function WaiverForm() {
 function TermsDialog({
   onClose,
   onConfirm,
+  content,
 }: {
   onClose: () => void;
   onConfirm: () => void;
+  content: WaiverContent;
 }) {
   return (
     <div
@@ -339,21 +387,23 @@ function TermsDialog({
       role="dialog"
       aria-modal="true"
       aria-labelledby="terms-title"
+      dir={content.dir}
+      lang={content.htmlLang}
     >
       <div className="max-h-[92vh] w-full max-w-3xl overflow-hidden rounded-lg bg-pearl shadow-soft-panel">
         <div className="flex items-center justify-between gap-4 border-b border-ink/10 px-4 py-4 sm:px-6">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-rouge">
-              Required reading
+              {content.ui.requiredReading}
             </p>
             <h3 id="terms-title" className="mt-1 text-2xl font-semibold text-ink">
-              Waiver terms and policy
+              {content.ui.termsTitle}
             </h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close terms"
+            aria-label={content.ui.closeTerms}
             className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-ink/12 text-graphite transition hover:border-rouge hover:text-rouge"
           >
             <X aria-hidden="true" className="h-5 w-5" />
@@ -362,7 +412,7 @@ function TermsDialog({
 
         <div className="max-h-[58vh] overflow-y-auto px-4 py-4 sm:px-6">
           <div className="grid gap-4">
-            {waiverTerms.map((term, index) => (
+            {content.terms.map((term, index) => (
               <section key={term.body} className="rounded-lg bg-white p-4">
                 <p className="text-sm font-semibold uppercase tracking-[0.16em] text-champagne">
                   {String(index + 1).padStart(2, "0")}
@@ -382,7 +432,7 @@ function TermsDialog({
             className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-ink px-5 text-base font-semibold text-white transition hover:bg-rouge"
           >
             <Check aria-hidden="true" className="h-5 w-5" />
-            Read terms and conditions
+            {content.ui.readTermsConfirm}
           </button>
         </div>
       </div>
@@ -398,7 +448,15 @@ function FieldError({ message }: { message?: string }) {
   return <p className="mt-1.5 text-sm font-medium text-rouge">{message}</p>;
 }
 
-function SignaturePad({ onChange }: { onChange: (value: string) => void }) {
+function SignaturePad({
+  ariaLabel,
+  placeholder,
+  onChange,
+}: {
+  ariaLabel: string;
+  placeholder: string;
+  onChange: (value: string) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
@@ -501,12 +559,12 @@ function SignaturePad({ onChange }: { onChange: (value: string) => void }) {
     <div className="relative h-40 overflow-hidden rounded-lg border border-dashed border-ink/25 bg-[linear-gradient(#ffffff,#ffffff),repeating-linear-gradient(0deg,transparent,transparent_37px,rgba(23,20,18,0.07)_38px)] md:h-48">
       {!hasInk ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-base font-medium text-graphite/45">
-          Sign here
+          {placeholder}
         </div>
       ) : null}
       <canvas
         ref={canvasRef}
-        aria-label="Signature"
+        aria-label={ariaLabel}
         className="h-full w-full"
         onPointerDown={beginDraw}
         onPointerMove={draw}

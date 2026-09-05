@@ -27,7 +27,7 @@ SUPABASE_SIGNED_DOCUMENTS_BUCKET=signed-waivers
 ADMIN_PASSWORD=change-me
 ```
 
-4. Run `supabase/migrations/20260619000000_create_waiver_submissions.sql` in the Supabase SQL editor, or run `supabase/schema.sql` for the current full schema.
+4. Run the SQL files in `supabase/migrations` in order in the Supabase SQL editor, or run `supabase/schema.sql` for the current full schema.
 
 5. Start the app:
 
@@ -38,7 +38,8 @@ npm run dev
 ## Notes
 
 - The API route uploads the signature PNG to `signature-images`, generates a signed PDF in `signed-waivers`, and inserts the submission into `public.waiver_submissions`.
-- The `/admin` page uses `ADMIN_PASSWORD` and lists waiver submissions with search, signature previews, signed document links, total count, and Excel export.
+- The attendee waiver opens in Arabic by default and includes an English switch. New submissions store the selected `language`.
+- The `/admin` page uses `ADMIN_PASSWORD` and lists waiver submissions with search, signature previews, signed document links, language, total count, and Excel export.
 - Signature and signed-document links in new admin exports are private Supabase signed links that expire after 1 year. Re-export from `/admin` if an older spreadsheet link expires.
 - After running the signed-document migration, use **Generate PDFs** in `/admin` to create signed PDFs for existing submissions. It processes records in batches and leaves the original records unchanged.
 - `SUPABASE_SERVICE_ROLE_KEY` is optional. Without it, inserts use the anon key and the included RLS policy.

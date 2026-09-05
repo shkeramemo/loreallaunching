@@ -9,7 +9,10 @@ create table if not exists public.waiver_submissions (
   signed_at timestamptz not null default now(),
   event_name text not null default 'L''Oréalistar Launch Event',
   user_agent text,
-  tablet_id text
+  tablet_id text,
+  language text default 'ar',
+  constraint waiver_submissions_language_check
+    check (language is null or language in ('ar', 'en'))
 );
 
 create index if not exists waiver_submissions_event_name_signed_at_idx
@@ -28,6 +31,7 @@ create policy "Allow waiver submission inserts"
     and length(full_name) >= 2
     and length(signature_url) > 0
     and event_name = 'L''Oréalistar Launch Event'
+    and (language is null or language in ('ar', 'en'))
   );
 
 insert into storage.buckets (

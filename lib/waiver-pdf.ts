@@ -1,11 +1,14 @@
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import chromium from "@sparticuz/chromium";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import puppeteer, { type Browser } from "puppeteer-core";
 
 import {
-  dataProcessingNotice,
-  signatureAcknowledgement,
-  waiverAcceptanceStatement,
-  waiverEventIntroduction,
-  waiverTerms,
+  fallbackWaiverLanguage,
+  getWaiverContent,
+  normalizeWaiverLanguage,
+  type WaiverLanguage,
 } from "@/lib/waiver-terms";
 
 type SignedWaiverDocumentInput = {
@@ -13,295 +16,328 @@ type SignedWaiverDocumentInput = {
   signaturePng: Uint8Array;
   signedAt: string;
   submissionId: string;
+  language?: WaiverLanguage | null;
 };
 
-const pageWidth = 595.28;
-const pageHeight = 841.89;
-const margin = 54;
-const contentWidth = pageWidth - margin * 2;
-const bodySize = 9.5;
-const lineHeight = 13.25;
-const ink = rgb(0.09, 0.08, 0.07);
-const graphite = rgb(0.25, 0.24, 0.23);
-const rouge = rgb(0.7, 0.09, 0.2);
-const divider = rgb(0.82, 0.81, 0.79);
+const arabicFontPath = join(
+  process.cwd(),
+  "public",
+  "fonts",
+  "NotoNaskhArabic-Regular.woff",
+);
+const localChromePaths = [
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+  "/Applications/Chromium.app/Contents/MacOS/Chromium",
+];
 
-function printableText(value: string) {
+function escapeHtml(value: string) {
   return value
-    .replaceAll("’", "'")
-    .replaceAll("‘", "'")
-    .replaceAll("“", '"')
-    .replaceAll("”", '"');
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
-function wrapText(
-  text: string,
-  font: { widthOfTextAtSize: (text: string, size: number) => number },
-  size: number,
-  maxWidth: number,
-) {
-  const lines: string[] = [];
+function formatDubaiTime(value: string, language: WaiverLanguage) {
+  const locale = language === "ar" ? "ar-AE" : "en-AE";
 
-  for (const paragraph of printableText(text).split("\n")) {
-    const words = paragraph.split(/\s+/).filter(Boolean);
-    let line = "";
-
-    for (const word of words) {
-      const candidate = line ? `${line} ${word}` : word;
-
-      if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
-        line = candidate;
-      } else {
-        if (line) {
-          lines.push(line);
-        }
-        line = word;
-      }
-    }
-
-    if (line) {
-      lines.push(line);
-    }
-  }
-
-  return lines;
-}
-
-function formatDubaiTime(value: string) {
-  return `${new Intl.DateTimeFormat("en-AE", {
+  return `${new Intl.DateTimeFormat(locale, {
     dateStyle: "medium",
     timeStyle: "short",
     timeZone: "Asia/Dubai",
   }).format(new Date(value))} GST`;
 }
 
-export async function createSignedWaiverPdf({
+function getLocalExecutablePath() {
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    return process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
+
+  return localChromePaths.find((path) => existsSync(path));
+}
+
+async function getBrowser() {
+  const localExecutablePath = getLocalExecutablePath();
+  const executablePath = localExecutablePath || (await chromium.executablePath());
+
+  return puppeteer.launch({
+    args: localExecutablePath
+      ? ["--no-sandbox", "--disable-setuid-sandbox"]
+      : chromium.args,
+    executablePath,
+    headless: true,
+  });
+}
+
+function buildSignedWaiverHtml({
   fullName,
   signaturePng,
   signedAt,
   submissionId,
-}: SignedWaiverDocumentInput) {
-  const pdf = await PDFDocument.create();
-  const helvetica = await pdf.embedFont(StandardFonts.Helvetica);
-  const helveticaBold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const signatureImage = await pdf.embedPng(signaturePng);
+  language,
+  arabicFontBase64,
+}: SignedWaiverDocumentInput & {
+  language: WaiverLanguage;
+  arabicFontBase64: string;
+}) {
+  const content = getWaiverContent(language);
+  const signatureDataUrl = `data:image/png;base64,${Buffer.from(signaturePng).toString("base64")}`;
+  const isArabic = content.dir === "rtl";
+  const terms = content.terms
+    .map(
+      (term, index) => `
+        <li value="${index + 1}">${escapeHtml(term.body).replaceAll("\n", "<br />")}</li>
+      `,
+    )
+    .join("");
 
-  let page = pdf.addPage([pageWidth, pageHeight]);
-  let pageNumber = 1;
-  let cursorY = pageHeight - margin;
+  return `<!doctype html>
+<html lang="${content.htmlLang}" dir="${content.dir}">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @font-face {
+        font-family: "Noto Naskh Arabic";
+        font-style: normal;
+        font-weight: 400 700;
+        src: url("data:font/woff;base64,${arabicFontBase64}") format("woff");
+      }
 
-  function addPage() {
-    page = pdf.addPage([pageWidth, pageHeight]);
-    pageNumber += 1;
-    cursorY = pageHeight - margin;
-    drawPageHeader();
+      @page {
+        size: A4;
+        margin: 19mm 17mm 17mm;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: #171412;
+        background: #ffffff;
+        font-family: ${
+          isArabic
+            ? '"Noto Naskh Arabic", Arial, sans-serif'
+            : 'Arial, "Helvetica Neue", sans-serif'
+        };
+        font-size: ${isArabic ? "11.5px" : "10.5px"};
+        line-height: ${isArabic ? "1.55" : "1.45"};
+        text-align: ${isArabic ? "right" : "left"};
+      }
+
+      header,
+      footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        border-color: #d6d1ca;
+        color: #2b2a28;
+      }
+
+      header {
+        align-items: flex-start;
+        border-bottom: 1px solid #d6d1ca;
+        padding-bottom: 8px;
+        margin-bottom: 20px;
+      }
+
+      footer {
+        border-top: 1px solid #d6d1ca;
+        margin-top: 22px;
+        padding-top: 8px;
+        font-size: 9px;
+      }
+
+      .brand {
+        color: #b31732;
+        font-weight: 700;
+        letter-spacing: ${isArabic ? "0" : "0.12em"};
+        text-transform: ${isArabic ? "none" : "uppercase"};
+      }
+
+      h1 {
+        margin: 0;
+        font-size: ${isArabic ? "22px" : "20px"};
+        line-height: 1.25;
+        font-weight: 700;
+      }
+
+      .event {
+        margin: 5px 0 14px;
+        color: #b31732;
+        font-size: ${isArabic ? "15px" : "13px"};
+        font-weight: 700;
+      }
+
+      .intro {
+        margin: 0 0 8px;
+      }
+
+      .acceptance {
+        margin: 0 0 12px;
+        font-weight: 700;
+      }
+
+      .terms {
+        margin: 0;
+        padding-${isArabic ? "right" : "left"}: 22px;
+        padding-${isArabic ? "left" : "right"}: 0;
+      }
+
+      .terms li::marker {
+        color: #b31732;
+        font-weight: 700;
+      }
+
+      .terms li {
+        margin: 0 0 8px;
+        padding-${isArabic ? "right" : "left"}: 7px;
+        break-inside: auto;
+        page-break-inside: auto;
+      }
+
+      .acknowledgement {
+        margin: 14px 0 12px;
+        font-weight: 700;
+        break-inside: avoid;
+      }
+
+      .signature-block {
+        break-inside: avoid;
+        border-top: 1px solid #d6d1ca;
+        margin-top: 18px;
+        padding-top: 16px;
+      }
+
+      .meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: flex-start;
+        margin-bottom: 26px;
+      }
+
+      .label {
+        color: #b31732;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: ${isArabic ? "none" : "uppercase"};
+      }
+
+      .name {
+        margin-top: 6px;
+        font-size: ${isArabic ? "18px" : "14px"};
+        font-weight: 700;
+      }
+
+      .date {
+        color: #2b2a28;
+        font-size: 10px;
+        text-align: ${isArabic ? "left" : "right"};
+      }
+
+      .signature-line {
+        width: 250px;
+        border-top: 1px solid #736f6b;
+        padding-top: 7px;
+        margin-${isArabic ? "right" : "left"}: 0;
+        margin-${isArabic ? "left" : "right"}: auto;
+      }
+
+      .signature-line img {
+        display: block;
+        width: 230px;
+        height: 74px;
+        object-fit: contain;
+      }
+
+      .signature-caption {
+        color: #2b2a28;
+        font-size: 10px;
+      }
+
+      .privacy {
+        margin: 14px 0 0;
+        color: #2b2a28;
+        font-size: ${isArabic ? "10px" : "9px"};
+      }
+
+      .reference {
+        margin-top: 18px;
+        color: #2b2a28;
+        font-size: 9px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand">${escapeHtml(content.pdf.headerLabel)}</div>
+      <div>${escapeHtml(content.documentTitle)}</div>
+    </header>
+
+    <main>
+      <h1>${escapeHtml(content.documentTitle)}</h1>
+      <div class="event">${escapeHtml(content.eventLabel)}</div>
+      <p class="intro">${escapeHtml(content.eventIntroduction)}</p>
+      <p class="acceptance">${escapeHtml(content.acceptanceStatement)}</p>
+      <ol class="terms">${terms}</ol>
+      <p class="acknowledgement">${escapeHtml(content.signatureAcknowledgement)}</p>
+
+      <section class="signature-block">
+        <div class="meta">
+          <div>
+            <div class="label">${escapeHtml(content.pdf.signedBy)}</div>
+            <div class="name">${escapeHtml(fullName)}</div>
+          </div>
+          <div class="date">${escapeHtml(formatDubaiTime(signedAt, language))}</div>
+        </div>
+
+        <div class="signature-line">
+          <img src="${signatureDataUrl}" alt="" />
+          <div class="signature-caption">${escapeHtml(content.pdf.handwrittenSignature)}</div>
+        </div>
+      </section>
+
+      <p class="privacy">${escapeHtml(content.dataProcessingNotice)}</p>
+      <p class="reference">${escapeHtml(content.pdf.documentReference)}: ${escapeHtml(submissionId)}</p>
+    </main>
+
+    <footer>
+      <div>${escapeHtml(content.pdf.footerLabel)}</div>
+      <div>${escapeHtml(submissionId)}</div>
+    </footer>
+  </body>
+</html>`;
+}
+
+export async function createSignedWaiverPdf(input: SignedWaiverDocumentInput) {
+  const language = normalizeWaiverLanguage(input.language || fallbackWaiverLanguage);
+  const arabicFontBytes = await readFile(arabicFontPath);
+  let browser: Browser | null = null;
+
+  try {
+    browser = await getBrowser();
+    const page = await browser.newPage();
+    const html = buildSignedWaiverHtml({
+      ...input,
+      language,
+      arabicFontBase64: Buffer.from(arabicFontBytes).toString("base64"),
+    });
+
+    await page.setContent(html, { waitUntil: "domcontentloaded" });
+    await page.evaluateHandle("document.fonts.ready");
+
+    const pdfBytes = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      preferCSSPageSize: true,
+    });
+
+    return pdfBytes;
+  } finally {
+    await browser?.close();
   }
-
-  function drawPageHeader() {
-    page.drawLine({
-      start: { x: margin, y: pageHeight - 36 },
-      end: { x: pageWidth - margin, y: pageHeight - 36 },
-      thickness: 0.75,
-      color: divider,
-    });
-    page.drawText("L'OREALISTAR", {
-      x: margin,
-      y: pageHeight - 28,
-      size: 8,
-      font: helveticaBold,
-      color: rouge,
-    });
-    page.drawText("Personal Release Undertaking", {
-      x: pageWidth - margin - 116,
-      y: pageHeight - 28,
-      size: 7.5,
-      font: helvetica,
-      color: graphite,
-    });
-  }
-
-  function drawPageFooter() {
-    page.drawLine({
-      start: { x: margin, y: 35 },
-      end: { x: pageWidth - margin, y: 35 },
-      thickness: 0.75,
-      color: divider,
-    });
-    page.drawText("L'Orealistar Launch Event | 23 June 2026 | Isola Bay, Dubai", {
-      x: margin,
-      y: 22,
-      size: 7,
-      font: helvetica,
-      color: graphite,
-    });
-    page.drawText(`Page ${pageNumber}`, {
-      x: pageWidth - margin - 34,
-      y: 22,
-      size: 7,
-      font: helvetica,
-      color: graphite,
-    });
-  }
-
-  function ensureSpace(height: number) {
-    if (cursorY - height < 62) {
-      drawPageFooter();
-      addPage();
-    }
-  }
-
-  function drawParagraph(
-    text: string,
-    {
-      font = helvetica,
-      size = bodySize,
-      color = graphite,
-      gap = 8,
-      x = margin,
-      width = contentWidth,
-    }: {
-      font?: typeof helvetica;
-      size?: number;
-      color?: ReturnType<typeof rgb>;
-      gap?: number;
-      x?: number;
-      width?: number;
-    } = {},
-  ) {
-    const lines = wrapText(text, font, size, width);
-    ensureSpace(lines.length * lineHeight + gap);
-
-    for (const line of lines) {
-      page.drawText(line, { x, y: cursorY, size, font, color });
-      cursorY -= lineHeight;
-    }
-
-    cursorY -= gap;
-  }
-
-  drawPageHeader();
-  page.drawText("PERSONAL RELEASE UNDERTAKING", {
-    x: margin,
-    y: cursorY,
-    size: 18,
-    font: helveticaBold,
-    color: ink,
-  });
-  cursorY -= 29;
-  page.drawText("L'Orealistar Launch Event", {
-    x: margin,
-    y: cursorY,
-    size: 12,
-    font: helveticaBold,
-    color: rouge,
-  });
-  cursorY -= 28;
-
-  drawParagraph(waiverEventIntroduction, {
-    font: helvetica,
-    size: 10,
-    color: ink,
-    gap: 11,
-  });
-  drawParagraph(waiverAcceptanceStatement, {
-    font: helveticaBold,
-    size: 10,
-    color: ink,
-    gap: 16,
-  });
-
-  waiverTerms.forEach((term, index) => {
-    const lines = wrapText(term.body, helvetica, bodySize, contentWidth - 22);
-    ensureSpace(lines.length * lineHeight + 13);
-    page.drawText(`${index + 1}.`, {
-      x: margin,
-      y: cursorY,
-      size: bodySize,
-      font: helveticaBold,
-      color: ink,
-    });
-    for (const line of lines) {
-      page.drawText(line, {
-        x: margin + 22,
-        y: cursorY,
-        size: bodySize,
-        font: helvetica,
-        color: graphite,
-      });
-      cursorY -= lineHeight;
-    }
-    cursorY -= 8;
-  });
-
-  drawParagraph(signatureAcknowledgement, {
-    font: helveticaBold,
-    size: 10,
-    color: ink,
-    gap: 14,
-  });
-
-  ensureSpace(166);
-  page.drawLine({
-    start: { x: margin, y: cursorY },
-    end: { x: pageWidth - margin, y: cursorY },
-    thickness: 0.75,
-    color: divider,
-  });
-  cursorY -= 23;
-  page.drawText("SIGNED BY", {
-    x: margin,
-    y: cursorY,
-    size: 8,
-    font: helveticaBold,
-    color: rouge,
-  });
-  cursorY -= 25;
-  page.drawText(printableText(fullName), {
-    x: margin,
-    y: cursorY,
-    size: 12,
-    font: helveticaBold,
-    color: ink,
-  });
-  page.drawText(formatDubaiTime(signedAt), {
-    x: pageWidth - margin - 145,
-    y: cursorY,
-    size: 9,
-    font: helvetica,
-    color: graphite,
-  });
-  cursorY -= 52;
-  page.drawLine({
-    start: { x: margin, y: cursorY },
-    end: { x: margin + 215, y: cursorY },
-    thickness: 0.75,
-    color: rgb(0.45, 0.44, 0.42),
-  });
-  const signatureDimensions = signatureImage.scaleToFit(205, 72);
-  page.drawImage(signatureImage, {
-    x: margin + 8,
-    y: cursorY + 7,
-    width: signatureDimensions.width,
-    height: signatureDimensions.height,
-  });
-  page.drawText("Handwritten signature", {
-    x: margin,
-    y: cursorY - 15,
-    size: 8,
-    font: helvetica,
-    color: graphite,
-  });
-  cursorY -= 44;
-  drawParagraph(dataProcessingNotice, { size: 8, color: graphite, gap: 0 });
-
-  page.drawText(`Document reference: ${submissionId}`, {
-    x: margin,
-    y: 46,
-    size: 7,
-    font: helvetica,
-    color: graphite,
-  });
-  drawPageFooter();
-
-  return pdf.save();
 }

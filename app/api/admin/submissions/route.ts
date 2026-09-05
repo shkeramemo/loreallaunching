@@ -5,8 +5,14 @@ import {
   getSignedDocumentBucketName,
 } from "@/lib/supabase/server";
 import { createSignedWaiverPdf } from "@/lib/waiver-pdf";
+import {
+  fallbackWaiverLanguage,
+  normalizeWaiverLanguage,
+  type WaiverLanguage,
+} from "@/lib/waiver-terms";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 const SIGNED_FILE_LINK_EXPIRY_SECONDS = 60 * 60 * 24 * 365;
 const BACKFILL_BATCH_SIZE = 20;
 
@@ -22,6 +28,7 @@ type WaiverSubmissionRow = {
   event_name: string;
   user_agent: string | null;
   tablet_id: string | null;
+  language: WaiverLanguage | null;
 };
 
 function getAdminAuthError(request: Request) {
@@ -80,7 +87,7 @@ export async function GET(request: Request) {
       supabase
         .from("waiver_submissions")
         .select(
-          "id, full_name, email, phone, consent_accepted, signature_url, signed_document_url, signed_at, event_name, user_agent, tablet_id",
+          "id, full_name, email, phone, consent_accepted, signature_url, signed_document_url, signed_at, event_name, user_agent, tablet_id, language",
           { count: "exact" },
         )
         .order("signed_at", { ascending: false })
@@ -139,6 +146,7 @@ export async function GET(request: Request) {
           eventName: row.event_name,
           userAgent: row.user_agent,
           tabletId: row.tablet_id,
+          language: normalizeWaiverLanguage(row.language || fallbackWaiverLanguage),
         };
       }),
     );
@@ -166,13 +174,31 @@ export async function POST(request: Request) {
   }
 
   try {
+    const body = (await request.json().catch(() => ({}))) as {
+      mode?: string;
+      offset?: number;
+    };
+    const regenerateAll = body.mode === "all";
+    const offset =
+      regenerateAll && Number.isInteger(body.offset) && Number(body.offset) >= 0
+        ? Number(body.offset)
+        : 0;
     const supabase = createSupabaseServerClient();
-    const { data, error } = await supabase
+    let query = supabase
       .from("waiver_submissions")
-      .select("id, full_name, signature_url, signed_at")
-      .is("signed_document_url", null)
+      .select("id, full_name, signature_url, signed_at, language", {
+        count: regenerateAll ? "exact" : undefined,
+      })
       .order("signed_at", { ascending: true })
-      .limit(BACKFILL_BATCH_SIZE);
+      .order("id", { ascending: true });
+
+    if (regenerateAll) {
+      query = query.range(offset, offset + BACKFILL_BATCH_SIZE - 1);
+    } else {
+      query = query.is("signed_document_url", null).limit(BACKFILL_BATCH_SIZE);
+    }
+
+    const { data, error, count } = await query;
 
     if (error) {
       return NextResponse.json({ message: error.message }, { status: 500 });
@@ -180,7 +206,7 @@ export async function POST(request: Request) {
 
     const rows = (data || []) as Pick<
       WaiverSubmissionRow,
-      "id" | "full_name" | "signature_url" | "signed_at"
+      "id" | "full_name" | "signature_url" | "signed_at" | "language"
     >[];
     const documentBucketName = getSignedDocumentBucketName();
     let processedCount = 0;
@@ -217,6 +243,7 @@ export async function POST(request: Request) {
           signaturePng: new Uint8Array(await signatureFile.arrayBuffer()),
           signedAt: row.signed_at,
           submissionId: row.id,
+          language: normalizeWaiverLanguage(row.language || fallbackWaiverLanguage),
         });
         const { error: uploadError } = await supabase.storage
           .from(documentBucketName)
@@ -232,8 +259,7 @@ export async function POST(request: Request) {
         const { error: updateError } = await supabase
           .from("waiver_submissions")
           .update({ signed_document_url: `${documentBucketName}/${documentPath}` })
-          .eq("id", row.id)
-          .is("signed_document_url", null);
+          .eq("id", row.id);
 
         if (updateError) {
           throw new Error("Unable to attach signed document.");
@@ -245,12 +271,15 @@ export async function POST(request: Request) {
       }
     }
 
-    const remainingCount = await getMissingSignedDocumentCount(supabase);
+    const remainingCount = regenerateAll
+      ? Math.max((count || 0) - offset - rows.length, 0)
+      : await getMissingSignedDocumentCount(supabase);
 
     return NextResponse.json({
       processedCount,
       failedCount,
       remainingCount,
+      nextOffset: regenerateAll ? offset + rows.length : null,
     });
   } catch {
     return NextResponse.json(

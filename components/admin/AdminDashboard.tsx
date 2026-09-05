@@ -12,6 +12,8 @@ import {
 import { useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 
+import type { WaiverLanguage } from "@/lib/waiver-terms";
+
 type AdminSubmission = {
   id: string;
   fullName: string;
@@ -26,6 +28,7 @@ type AdminSubmission = {
   eventName: string;
   userAgent: string | null;
   tabletId: string | null;
+  language: WaiverLanguage;
 };
 
 type LoadState = "locked" | "loading" | "ready" | "error";
@@ -47,6 +50,7 @@ function downloadSpreadsheet(submissions: AdminSubmission[]) {
     "phone",
     "consent_accepted",
     "event_name",
+    "language",
     "tablet_id",
     "signature",
     "signed_document",
@@ -60,6 +64,7 @@ function downloadSpreadsheet(submissions: AdminSubmission[]) {
     submission.phone,
     submission.consentAccepted,
     submission.eventName,
+    submission.language === "ar" ? "Arabic" : "English",
     submission.tabletId,
     submission.signaturePreviewUrl ? "View signature" : "",
     submission.signedDocumentPreviewUrl ? "View signed document" : "",
@@ -71,7 +76,7 @@ function downloadSpreadsheet(submissions: AdminSubmission[]) {
     const row = index + 1;
 
     if (submission.signaturePreviewUrl) {
-      const cellAddress = XLSX.utils.encode_cell({ r: row, c: 8 });
+      const cellAddress = XLSX.utils.encode_cell({ r: row, c: 9 });
       worksheet[cellAddress] = {
         t: "s",
         v: "View signature",
@@ -83,7 +88,7 @@ function downloadSpreadsheet(submissions: AdminSubmission[]) {
     }
 
     if (submission.signedDocumentPreviewUrl) {
-      const cellAddress = XLSX.utils.encode_cell({ r: row, c: 9 });
+      const cellAddress = XLSX.utils.encode_cell({ r: row, c: 10 });
       worksheet[cellAddress] = {
         t: "s",
         v: "View signed document",
@@ -103,6 +108,7 @@ function downloadSpreadsheet(submissions: AdminSubmission[]) {
     { wch: 18 },
     { wch: 18 },
     { wch: 28 },
+    { wch: 14 },
     { wch: 22 },
     { wch: 18 },
     { wch: 24 },
@@ -126,6 +132,7 @@ export function AdminDashboard() {
   const [totalCount, setTotalCount] = useState(0);
   const [missingSignedDocumentCount, setMissingSignedDocumentCount] = useState(0);
   const [isGeneratingDocuments, setIsGeneratingDocuments] = useState(false);
+  const [isRegeneratingDocuments, setIsRegeneratingDocuments] = useState(false);
   const [loadState, setLoadState] = useState<LoadState>("locked");
   const [message, setMessage] = useState("");
 
@@ -143,6 +150,7 @@ export function AdminDashboard() {
         submission.phone,
         submission.eventName,
         submission.tabletId,
+        submission.language === "ar" ? "Arabic" : "English",
       ]
         .filter(Boolean)
         .some((value) =>
@@ -193,30 +201,43 @@ export function AdminDashboard() {
     void loadSubmissions(password);
   }
 
-  async function generateMissingDocuments() {
-    if (!savedPassword || isGeneratingDocuments) {
+  async function generateDocuments(mode: "missing" | "all") {
+    if (
+      !savedPassword ||
+      isGeneratingDocuments ||
+      isRegeneratingDocuments
+    ) {
       return;
     }
 
-    setIsGeneratingDocuments(true);
+    if (mode === "all") {
+      setIsRegeneratingDocuments(true);
+    } else {
+      setIsGeneratingDocuments(true);
+    }
+
     setMessage("");
     let generatedCount = 0;
     let failedCount = 0;
     let finalMessage = "";
+    let offset = 0;
 
     try {
       while (true) {
         const response = await fetch("/api/admin/submissions", {
           method: "POST",
           headers: {
+            "Content-Type": "application/json",
             "x-admin-password": savedPassword,
           },
+          body: JSON.stringify({ mode, offset }),
         });
         const result = (await response.json()) as {
           message?: string;
           processedCount?: number;
           failedCount?: number;
           remainingCount?: number;
+          nextOffset?: number | null;
         };
 
         if (!response.ok) {
@@ -225,9 +246,13 @@ export function AdminDashboard() {
 
         generatedCount += result.processedCount || 0;
         failedCount += result.failedCount || 0;
+        offset = result.nextOffset ?? offset;
 
         if ((result.remainingCount || 0) === 0) {
-          finalMessage = `Generated ${generatedCount} signed document${generatedCount === 1 ? "" : "s"}.`;
+          finalMessage =
+            mode === "all"
+              ? `Regenerated ${generatedCount} signed document${generatedCount === 1 ? "" : "s"}.`
+              : `Generated ${generatedCount} signed document${generatedCount === 1 ? "" : "s"}.`;
           break;
         }
 
@@ -247,6 +272,7 @@ export function AdminDashboard() {
       );
     } finally {
       setIsGeneratingDocuments(false);
+      setIsRegeneratingDocuments(false);
     }
   }
 
@@ -334,7 +360,7 @@ export function AdminDashboard() {
               </button>
               <button
                 type="button"
-                onClick={() => void generateMissingDocuments()}
+                onClick={() => void generateDocuments("missing")}
                 disabled={
                   isGeneratingDocuments || missingSignedDocumentCount === 0
                 }
@@ -346,6 +372,23 @@ export function AdminDashboard() {
                   <FileText aria-hidden="true" className="h-5 w-5" />
                 )}
                 Generate PDFs ({missingSignedDocumentCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => void generateDocuments("all")}
+                disabled={
+                  isRegeneratingDocuments ||
+                  isGeneratingDocuments ||
+                  totalCount === 0
+                }
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-ink/12 bg-white px-4 text-base font-semibold text-graphite transition hover:border-rouge hover:text-rouge disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isRegeneratingDocuments ? (
+                  <Loader2 aria-hidden="true" className="h-5 w-5 animate-spin" />
+                ) : (
+                  <FileText aria-hidden="true" className="h-5 w-5" />
+                )}
+                Regenerate PDFs
               </button>
               <button
                 type="button"
@@ -387,18 +430,19 @@ export function AdminDashboard() {
 
         <div className="overflow-hidden rounded-lg border border-ink/10 bg-white shadow-soft-panel">
           <div className="overflow-x-auto">
-            <div className="grid min-w-[900px] grid-cols-[180px_1fr_170px_150px] border-b border-ink/10 bg-pearl px-4 py-3 text-sm font-semibold uppercase tracking-[0.12em] text-graphite">
+            <div className="grid min-w-[980px] grid-cols-[180px_1fr_110px_170px_150px] border-b border-ink/10 bg-pearl px-4 py-3 text-sm font-semibold uppercase tracking-[0.12em] text-graphite">
               <span>Signed at</span>
               <span>Name</span>
+              <span>Language</span>
               <span>Signature</span>
               <span>Document</span>
             </div>
-            <div className="max-h-[calc(100vh-300px)] min-w-[900px] overflow-y-auto">
+            <div className="max-h-[calc(100vh-300px)] min-w-[980px] overflow-y-auto">
             {filteredSubmissions.length > 0 ? (
               filteredSubmissions.map((submission) => (
                 <article
                   key={submission.id}
-                  className="grid min-h-[92px] grid-cols-[180px_1fr_170px_150px] items-center gap-4 border-b border-ink/8 px-4 py-3 last:border-b-0"
+                  className="grid min-h-[92px] grid-cols-[180px_1fr_110px_170px_150px] items-center gap-4 border-b border-ink/8 px-4 py-3 last:border-b-0"
                 >
                   <time className="text-sm font-medium text-graphite">
                     {formatSignedAt(submission.signedAt)}
@@ -411,6 +455,9 @@ export function AdminDashboard() {
                       {submission.tabletId || "No tablet ID"}
                     </p>
                   </div>
+                  <span className="text-sm font-semibold text-graphite">
+                    {submission.language === "ar" ? "Arabic" : "English"}
+                  </span>
                   <div className="h-16 overflow-hidden rounded-lg border border-ink/10 bg-pearl">
                     {submission.signaturePreviewUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
