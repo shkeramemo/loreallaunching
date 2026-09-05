@@ -189,16 +189,12 @@ export async function POST(request: Request) {
     const documentBucketName = getSignedDocumentBucketName();
     const submissionId = crypto.randomUUID();
     const storageDate = new Date().toISOString().slice(0, 10);
-    const signaturePath = [
-      "signatures",
-      storageDate,
-      `${submissionId}.png`,
-    ].join("/");
-    const documentPath = [
-      "documents",
-      storageDate,
-      `${submissionId}.pdf`,
-    ].join("/");
+    const signaturePath = ["signatures", storageDate, `${submissionId}.png`].join(
+      "/",
+    );
+    const documentPath = ["documents", storageDate, `${submissionId}.pdf`].join(
+      "/",
+    );
 
     const { error: uploadError } = await supabase.storage
       .from(signatureBucketName)

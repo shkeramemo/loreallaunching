@@ -206,7 +206,11 @@ export async function POST(request: Request) {
 
     const rows = (data || []) as Pick<
       WaiverSubmissionRow,
-      "id" | "full_name" | "signature_url" | "signed_at" | "language"
+      | "id"
+      | "full_name"
+      | "signature_url"
+      | "signed_at"
+      | "language"
     >[];
     const documentBucketName = getSignedDocumentBucketName();
     let processedCount = 0;

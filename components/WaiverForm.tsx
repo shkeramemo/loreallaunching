@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import {
   Check,
   ChevronRight,
@@ -170,35 +171,42 @@ export function WaiverForm() {
         className="w-full rounded-lg border border-ink/10 bg-pearl p-4 shadow-soft-panel sm:p-5 md:max-h-[calc(100vh-4rem)] md:overflow-y-auto md:p-7"
       >
         <header className="mb-6 border-b border-ink/10 pb-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-rouge">
-                {content.eventLabel}
-              </p>
-              <h1 className="mt-2 text-3xl font-semibold leading-tight text-ink md:text-4xl">
-                {content.documentTitle}
-              </h1>
+          <div className="rounded-lg bg-ink px-4 py-5 text-white md:px-6">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <Image
+                  src="/logo-white.png"
+                  alt="L'Oréalistar"
+                  width={1783}
+                  height={400}
+                  priority
+                  className="h-auto w-52 max-w-full md:w-64"
+                />
+                <h1 className="mt-5 text-3xl font-semibold leading-tight md:text-4xl">
+                  {content.documentTitle}
+                </h1>
+              </div>
+              <fieldset
+                className="inline-grid grid-cols-2 self-start rounded-lg border border-white/18 bg-white/10 p-1 sm:self-center"
+                aria-label={content.ui.languageLabel}
+                dir="ltr"
+              >
+                {(["ar", "en"] as const).map((language) => (
+                  <button
+                    key={language}
+                    type="button"
+                    onClick={() => changeLanguage(language)}
+                    className={`h-11 min-w-[104px] rounded-md px-4 text-sm font-semibold transition ${
+                      payload.language === language
+                        ? "bg-white text-ink"
+                        : "text-white/78 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    {language === "ar" ? "العربية" : "English"}
+                  </button>
+                ))}
+              </fieldset>
             </div>
-            <fieldset
-              className="inline-grid grid-cols-2 rounded-lg border border-ink/12 bg-white p-1"
-              aria-label={content.ui.languageLabel}
-              dir="ltr"
-            >
-              {(["ar", "en"] as const).map((language) => (
-                <button
-                  key={language}
-                  type="button"
-                  onClick={() => changeLanguage(language)}
-                  className={`h-11 min-w-[104px] rounded-md px-4 text-sm font-semibold transition ${
-                    payload.language === language
-                      ? "bg-ink text-white"
-                      : "text-graphite hover:bg-pearl"
-                  }`}
-                >
-                  {language === "ar" ? "العربية" : "English"}
-                </button>
-              ))}
-            </fieldset>
           </div>
         </header>
 
@@ -210,11 +218,13 @@ export function WaiverForm() {
             <input
               type="text"
               autoComplete="name"
-              dir="auto"
+              dir={content.dir}
               value={payload.fullName}
               onChange={(event) => updateField("fullName", event.target.value)}
               placeholder={content.ui.fullNamePlaceholder}
-              className="h-14 w-full rounded-lg border border-ink/12 bg-white px-4 text-lg text-ink outline-none transition focus:border-rouge focus:ring-4 focus:ring-rouge/12"
+              className={`h-14 w-full rounded-lg border border-ink/12 bg-white px-4 text-lg text-ink outline-none transition focus:border-rouge focus:ring-4 focus:ring-rouge/12 ${
+                content.dir === "rtl" ? "text-right" : "text-left"
+              }`}
             />
             <FieldError message={errors.fullName} />
           </label>
