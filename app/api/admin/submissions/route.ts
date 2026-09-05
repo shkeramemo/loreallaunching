@@ -270,7 +270,11 @@ export async function POST(request: Request) {
         }
 
         processedCount += 1;
-      } catch {
+      } catch (error) {
+        console.error("Signed waiver PDF regeneration failed", {
+          submissionId: row.id,
+          error,
+        });
         failedCount += 1;
       }
     }

@@ -220,7 +220,8 @@ export async function POST(request: Request) {
         submissionId,
         language: normalizedPayload.language,
       });
-    } catch {
+    } catch (error) {
+      console.error("Signed waiver PDF generation failed", error);
       await supabase.storage.from(signatureBucketName).remove([signaturePath]);
       return NextResponse.json(
         { message: "Unable to create the signed waiver document. Please try again." },
@@ -273,6 +274,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ message: "Waiver received." }, { status: 201 });
   } catch (error) {
+    console.error("Waiver submission failed", error);
     const message =
       error instanceof Error &&
       error.message === "Supabase environment variables are not configured."
