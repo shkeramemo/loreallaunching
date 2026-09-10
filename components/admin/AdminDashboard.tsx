@@ -34,17 +34,17 @@ type AdminSubmission = {
 type LoadState = "locked" | "loading" | "ready" | "error";
 
 function formatSignedAt(value: string) {
-  return new Intl.DateTimeFormat("en-AE", {
+  return new Intl.DateTimeFormat("en-SA", {
     dateStyle: "medium",
     timeStyle: "short",
-    timeZone: "Asia/Dubai",
+    timeZone: "Asia/Riyadh",
   }).format(new Date(value));
 }
 
 function downloadSpreadsheet(submissions: AdminSubmission[]) {
   const headers = [
     "id",
-    "signed_at_dubai",
+    "signed_at_saudi",
     "full_name",
     "email",
     "phone",

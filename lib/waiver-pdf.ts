@@ -40,14 +40,15 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#039;");
 }
 
-function formatDubaiTime(value: string, language: WaiverLanguage) {
-  const locale = language === "ar" ? "ar-AE" : "en-AE";
+function formatEventTime(value: string, language: WaiverLanguage) {
+  const locale = language === "ar" ? "ar-SA-u-ca-gregory" : "en-SA";
+  const suffix = language === "ar" ? "بتوقيت السعودية" : "Saudi time";
 
   return `${new Intl.DateTimeFormat(locale, {
     dateStyle: "medium",
     timeStyle: "short",
-    timeZone: "Asia/Dubai",
-  }).format(new Date(value))} GST`;
+    timeZone: "Asia/Riyadh",
+  }).format(new Date(value))} ${suffix}`;
 }
 
 function getLocalExecutablePath() {
@@ -292,7 +293,7 @@ function buildSignedWaiverHtml({
             <div class="label">${escapeHtml(content.pdf.signedBy)}</div>
             <div class="name">${escapeHtml(fullName)}</div>
           </div>
-          <div class="date">${escapeHtml(formatDubaiTime(signedAt, language))}</div>
+          <div class="date">${escapeHtml(formatEventTime(signedAt, language))}</div>
         </div>
 
         <div class="signature-line">
