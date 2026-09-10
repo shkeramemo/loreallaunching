@@ -14,7 +14,7 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 60;
 const SIGNED_FILE_LINK_EXPIRY_SECONDS = 60 * 60 * 24 * 365;
-const BACKFILL_BATCH_SIZE = 20;
+const BACKFILL_BATCH_SIZE = 1;
 
 type WaiverSubmissionRow = {
   id: string;

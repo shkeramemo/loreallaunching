@@ -32,6 +32,16 @@ type AdminSubmission = {
 };
 
 type LoadState = "locked" | "loading" | "ready" | "error";
+type AdminApiResponse = {
+  message?: string;
+  totalCount?: number;
+  missingSignedDocumentCount?: number;
+  submissions?: AdminSubmission[];
+  processedCount?: number;
+  failedCount?: number;
+  remainingCount?: number;
+  nextOffset?: number | null;
+};
 
 function formatSignedAt(value: string) {
   return new Intl.DateTimeFormat("en-SA", {
@@ -124,6 +134,23 @@ function downloadSpreadsheet(submissions: AdminSubmission[]) {
   );
 }
 
+async function parseAdminResponse(response: Response): Promise<AdminApiResponse> {
+  const contentType = response.headers.get("content-type") || "";
+
+  if (contentType.includes("application/json")) {
+    return (await response.json()) as AdminApiResponse;
+  }
+
+  const text = (await response.text()).trim();
+
+  return {
+    message:
+      text.length > 0
+        ? text.slice(0, 220)
+        : "The server returned an empty response.",
+  };
+}
+
 export function AdminDashboard() {
   const [password, setPassword] = useState("");
   const [savedPassword, setSavedPassword] = useState("");
@@ -171,12 +198,7 @@ export function AdminDashboard() {
           "x-admin-password": passwordToUse,
         },
       });
-      const result = (await response.json()) as {
-        message?: string;
-        totalCount?: number;
-        missingSignedDocumentCount?: number;
-        submissions?: AdminSubmission[];
-      };
+      const result = await parseAdminResponse(response);
 
       if (!response.ok) {
         setLoadState("error");
@@ -232,13 +254,7 @@ export function AdminDashboard() {
           },
           body: JSON.stringify({ mode, offset }),
         });
-        const result = (await response.json()) as {
-          message?: string;
-          processedCount?: number;
-          failedCount?: number;
-          remainingCount?: number;
-          nextOffset?: number | null;
-        };
+        const result = await parseAdminResponse(response);
 
         if (!response.ok) {
           throw new Error(result.message || "Unable to generate signed documents.");
@@ -247,6 +263,11 @@ export function AdminDashboard() {
         generatedCount += result.processedCount || 0;
         failedCount += result.failedCount || 0;
         offset = result.nextOffset ?? offset;
+        setMessage(
+          mode === "all"
+            ? `Regenerating PDFs... ${generatedCount} updated, ${failedCount} failed.`
+            : `Generating PDFs... ${generatedCount} created, ${failedCount} failed.`,
+        );
 
         if ((result.remainingCount || 0) === 0) {
           finalMessage =
@@ -256,7 +277,7 @@ export function AdminDashboard() {
           break;
         }
 
-        if (!result.processedCount) {
+        if (!(result.processedCount || result.failedCount)) {
           finalMessage = `${generatedCount} document${generatedCount === 1 ? "" : "s"} generated. ${failedCount} submission${failedCount === 1 ? " could" : "s could"} not be processed.`;
           break;
         }
